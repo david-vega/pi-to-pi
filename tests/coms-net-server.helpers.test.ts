@@ -1,57 +1,40 @@
 import { describe, expect, it } from "bun:test";
+import { isLoopback, resolveUniqueName, tokensEqual, ulid } from "../scripts/coms-net-server";
 
-import {
-  isLoopback,
-  resolveUniqueName,
-  tokensEqual,
-} from "../scripts/coms-net-server";
+describe("coms-net-server helpers", () => {
+	it("tokensEqual returns true for exact match", () => {
+		expect(tokensEqual("abc123", "abc123")).toBe(true);
+	});
 
-describe("tokensEqual", () => {
-  it("returns true for identical tokens", () => {
-    expect(tokensEqual("secret-token", "secret-token")).toBe(true);
-  });
+	it("tokensEqual returns false for different values and lengths", () => {
+		expect(tokensEqual("abc123", "abc124")).toBe(false);
+		expect(tokensEqual("abc123", "abc1234")).toBe(false);
+	});
 
-  it("returns false for different tokens", () => {
-    expect(tokensEqual("secret-token", "secret-token-2")).toBe(false);
-  });
+	it("isLoopback recognizes loopback hosts", () => {
+		expect(isLoopback("127.0.0.1")).toBe(true);
+		expect(isLoopback("::1")).toBe(true);
+		expect(isLoopback("localhost")).toBe(true);
+		expect(isLoopback("0.0.0.0")).toBe(false);
+		expect(isLoopback("192.168.1.10")).toBe(false);
+	});
 
-  it("returns false when lengths differ", () => {
-    expect(tokensEqual("short", "shorter")).toBe(false);
-  });
-});
+	it("resolveUniqueName appends numeric suffixes for collisions", () => {
+		const project: any = {
+			agents: new Map([
+				["s1", { name: "coder" }],
+				["s2", { name: "coder2" }],
+			]),
+		};
+		expect(resolveUniqueName(project, "planner")).toBe("planner");
+		expect(resolveUniqueName(project, "coder")).toBe("coder3");
+	});
 
-describe("isLoopback", () => {
-  it("accepts loopback hosts", () => {
-    expect(isLoopback("127.0.0.1")).toBe(true);
-    expect(isLoopback("::1")).toBe(true);
-    expect(isLoopback("localhost")).toBe(true);
-  });
-
-  it("rejects non-loopback hosts", () => {
-    expect(isLoopback("0.0.0.0")).toBe(false);
-    expect(isLoopback("192.168.1.10")).toBe(false);
-    expect(isLoopback("example.com")).toBe(false);
-  });
-});
-
-describe("resolveUniqueName", () => {
-  it("returns desired name when unused", () => {
-    const project = {
-      agents: new Map(),
-    } as any;
-
-    expect(resolveUniqueName(project, "agent")).toBe("agent");
-  });
-
-  it("adds numeric suffix for collisions", () => {
-    const project = {
-      agents: new Map([
-        ["s1", { name: "agent" }],
-        ["s2", { name: "agent2" }],
-        ["s3", { name: "agent3" }],
-      ]),
-    } as any;
-
-    expect(resolveUniqueName(project, "agent")).toBe("agent4");
-  });
+	it("ulid returns 26-char ids and changes across calls", () => {
+		const a = ulid();
+		const b = ulid();
+		expect(a).toHaveLength(26);
+		expect(b).toHaveLength(26);
+		expect(a).not.toBe(b);
+	});
 });
