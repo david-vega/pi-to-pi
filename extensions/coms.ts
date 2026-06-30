@@ -1083,6 +1083,7 @@ export default function (pi: ExtensionAPI) {
 		// top border carries a branded ` coms ` tag so the widget reads as its
 		// own block; bottom border stays a plain rule for minimalism.
 		const safeWidth = Math.max(0, width);
+		if (safeWidth === 0) return [];
 		let topBorder: string;
 		let bottomBorder: string;
 		if (safeWidth < 12) {
@@ -1107,7 +1108,11 @@ export default function (pi: ExtensionAPI) {
 				const right = theme.fg("dim", "━".repeat(fallbackRemaining) + "┓");
 				topBorder = left + right;
 			}
-			bottomBorder = theme.fg("dim", "┗" + "━".repeat(safeWidth - 2) + "┛");
+			if (safeWidth <= 2) {
+				bottomBorder = theme.fg("dim", "━".repeat(safeWidth));
+			} else {
+				bottomBorder = theme.fg("dim", "┗" + "━".repeat(Math.max(0, safeWidth - 2)) + "┛");
+			}
 		}
 
 		if (rows.length === 0) {
@@ -1125,16 +1130,21 @@ export default function (pi: ExtensionAPI) {
 		});
 
 		const out: string[] = [topBorder];
+		const compact = safeWidth < 72;
+		const ultraCompact = safeWidth < 52;
+		const nameWidth = ultraCompact ? 8 : 12;
+		const modelWidth = ultraCompact ? 10 : 14;
+		const barWidth = ultraCompact ? 8 : compact ? 10 : 15;
 
 		for (const r of rows) {
 			const pctNum = r.pct ?? 0;
-			const filled = Math.max(0, Math.min(15, Math.round((pctNum / 100) * 15)));
-			const empty = 15 - filled;
+			const filled = Math.max(0, Math.min(barWidth, Math.round((pctNum / 100) * barWidth)));
+			const empty = barWidth - filled;
 			const pctLabel = r.pct == null ? "--%" : `${r.pct}%`;
 
 			if (r.stale) {
-				const dimRow = `✗ ${r.name.padEnd(12)} ${abbreviateModel(r.model).padEnd(14)} [${"-".repeat(15)}] ${pctLabel.padStart(4)}  —  ${r.purpose || ""}`;
-				out.push(truncateToWidth(" " + theme.fg("dim", dimRow), width));
+				const staleLine = `✗ ${r.name.padEnd(nameWidth)} ${abbreviateModel(r.model || "unknown").padEnd(modelWidth)} [${"-".repeat(barWidth)}] ${pctLabel.padStart(4)}${r.isSelf ? ` q:${r.queueDepth}` : ""}`;
+				out.push(truncateToWidth(" " + theme.fg("dim", staleLine), width));
 				continue;
 			}
 
@@ -1142,11 +1152,11 @@ export default function (pi: ExtensionAPI) {
 				? theme.fg("success", "◆")
 				: (r.pending ? theme.fg("dim", "●") : hexFg(r.color, "●"));
 			const namePart = r.isSelf
-				? theme.bold(theme.fg("success", r.name.padEnd(12)))
-				: theme.fg("accent", r.name.padEnd(12));
-			const modelPart = theme.fg("dim", abbreviateModel(r.model).padEnd(14));
+				? theme.bold(theme.fg("success", r.name.padEnd(nameWidth)))
+				: theme.fg("accent", r.name.padEnd(nameWidth));
+			const modelPart = theme.fg("dim", abbreviateModel(r.model || "unknown").padEnd(modelWidth));
 			const barFill = r.pending
-				? theme.fg("dim", "-".repeat(15))
+				? theme.fg("dim", "-".repeat(barWidth))
 				: hexFg(r.color, "#".repeat(filled)) + theme.fg("dim", "-".repeat(empty));
 			const bar = theme.fg("warning", "[") + barFill + theme.fg("warning", "]");
 			const pctPart = " " + theme.fg("accent", pctLabel.padStart(4));
@@ -1154,7 +1164,8 @@ export default function (pi: ExtensionAPI) {
 			const sep = theme.fg("dim", "  —  ");
 			const purposePart = theme.fg("muted", r.purpose || "");
 
-			const line = " " + swatch + " " + namePart + " " + modelPart + " " + bar + pctPart + queuePart + sep + purposePart;
+			const core = " " + swatch + " " + namePart + " " + modelPart + " " + bar + pctPart + queuePart;
+			const line = ultraCompact ? core : core + sep + purposePart;
 			out.push(truncateToWidth(line, width));
 		}
 
