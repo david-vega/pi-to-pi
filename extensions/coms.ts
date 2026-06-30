@@ -1015,6 +1015,7 @@ export default function (pi: ExtensionAPI) {
 			color: string;
 			purpose: string;
 			pct: number | null;
+			queueDepth: number;
 			pending: boolean;
 			stale: boolean;
 			isSelf: boolean;
@@ -1023,12 +1024,18 @@ export default function (pi: ExtensionAPI) {
 		const seenSessions = new Set<string>();
 
 		if (identity) {
+			const selfModel = currentCtx?.model?.id ?? identity.model ?? "unknown";
+			const selfPercentRaw = currentCtx?.getContextUsage?.()?.percent;
+			const selfPct = typeof selfPercentRaw === "number" && Number.isFinite(selfPercentRaw)
+				? Math.round(selfPercentRaw)
+				: null;
 			rows.push({
 				name: identity.name,
-				model: currentCtx?.model?.id ?? identity.model,
+				model: selfModel || "unknown",
 				color: identity.color,
-				purpose: identity.purpose,
-				pct: Math.round(currentCtx?.getContextUsage()?.percent ?? 0),
+				purpose: identity.purpose || "",
+				pct: selfPct,
+				queueDepth: inboundQueue.size || 0,
 				pending: false,
 				stale: false,
 				isSelf: true,
@@ -1044,6 +1051,7 @@ export default function (pi: ExtensionAPI) {
 				color: card.color,
 				purpose: card.purpose,
 				pct: card.context_used_pct,
+				queueDepth: 0,
 				pending: false,
 				stale: (card.staleCount ?? 0) >= 3,
 				isSelf: false,
@@ -1063,6 +1071,7 @@ export default function (pi: ExtensionAPI) {
 				color: entry.color,
 				purpose: entry.purpose,
 				pct: null,
+				queueDepth: 0,
 				pending: true,
 				stale: false,
 				isSelf: false,
@@ -1141,10 +1150,11 @@ export default function (pi: ExtensionAPI) {
 				: hexFg(r.color, "#".repeat(filled)) + theme.fg("dim", "-".repeat(empty));
 			const bar = theme.fg("warning", "[") + barFill + theme.fg("warning", "]");
 			const pctPart = " " + theme.fg("accent", pctLabel.padStart(4));
+			const queuePart = r.isSelf ? theme.fg("dim", ` q:${r.queueDepth}`) : "";
 			const sep = theme.fg("dim", "  —  ");
 			const purposePart = theme.fg("muted", r.purpose || "");
 
-			const line = " " + swatch + " " + namePart + " " + modelPart + " " + bar + pctPart + sep + purposePart;
+			const line = " " + swatch + " " + namePart + " " + modelPart + " " + bar + pctPart + queuePart + sep + purposePart;
 			out.push(truncateToWidth(line, width));
 		}
 
