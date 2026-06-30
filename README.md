@@ -2,6 +2,12 @@
 
 Installable Pi package for agent-to-agent workflows.
 
+## Original credit
+
+This package is derived from work by **disler** and the original repository:
+- User: https://github.com/disler
+- Repo: https://github.com/disler/pi-vs-claude-code/
+
 ## What this package includes
 
 ### Communication extensions
