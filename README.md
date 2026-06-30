@@ -26,6 +26,24 @@ pi install npm:pi-to-pi
 
 After install, Pi auto-loads package extensions on startup.
 
+## Safe defaults (autoload behavior)
+
+By design, package autoload is **communication-only**:
+- `extensions/coms.ts`
+- `extensions/coms-net.ts`
+
+Advanced orchestration extensions are shipped but **not autoloaded** (to avoid prompt/tool override noise):
+- `pi-pi`, `agent-chain`, `cross-agent`, `agent-team` / `cross-team`, `tilldone`
+
+Opt in explicitly when needed (local dev path example):
+
+```bash
+pi -e /home/zetacu/projects/pi-to-pi/extensions/pi-pi.ts
+pi -e /home/zetacu/projects/pi-to-pi/extensions/agent-chain.ts
+pi -e /home/zetacu/projects/pi-to-pi/extensions/agent-team.ts
+pi -e /home/zetacu/projects/pi-to-pi/extensions/tilldone.ts
+```
+
 ---
 
 ## Local mode (`coms`)

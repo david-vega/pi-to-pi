@@ -16,13 +16,7 @@
   "pi": {
     "extensions": [
       "./extensions/coms.ts",
-      "./extensions/coms-net.ts",
-      "./extensions/pi-pi.ts",
-      "./extensions/agent-chain.ts",
-      "./extensions/cross-agent.ts",
-      "./extensions/agent-team.ts",
-      "./extensions/cross-team.ts",
-      "./extensions/tilldone.ts"
+      "./extensions/coms-net.ts"
     ],
     "prompts": [
       "./agents/scout.md",
@@ -69,7 +63,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "check:load": "PI_OFFLINE=1 pi -e ./extensions/coms.ts -e ./extensions/coms-net.ts -e ./extensions/pi-pi.ts -e ./extensions/agent-chain.ts -e ./extensions/cross-agent.ts -e ./extensions/agent-team.ts -e ./extensions/cross-team.ts -e ./extensions/tilldone.ts --help",
+    "check:load": "PI_OFFLINE=1 pi -e ./extensions/coms.ts -e ./extensions/coms-net.ts --help",
+    "check:load:all": "PI_OFFLINE=1 pi -e ./extensions/coms.ts -e ./extensions/coms-net.ts -e ./extensions/pi-pi.ts -e ./extensions/agent-chain.ts -e ./extensions/cross-agent.ts -e ./extensions/agent-team.ts -e ./extensions/cross-team.ts -e ./extensions/tilldone.ts --help",
     "check:pack": "npm pack --dry-run"
   }
 }
