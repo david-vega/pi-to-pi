@@ -1094,15 +1094,16 @@ export default function (pi: ExtensionAPI) {
 		} else {
 			const left = theme.fg("dim", "┏━") + theme.fg("border", " coms-net ");
 			const leftFill = theme.fg("dim", "━");
-			const nameLen = identity ? identity.name.length : 0;
-			const rightTagVisLen = identity ? nameLen + 4 : 0;
+			const selfQueueLabel = identity ? ` q:${Math.max(0, inboundQueue.size || 0)}` : "";
+			const rightLabel = identity ? `${identity.name}${selfQueueLabel}` : "";
+			const rightTagVisLen = identity ? rightLabel.length + 3 /* leading space + " ━" */ : 0;
 			// "┏━ coms-net ━" prefix has 13 visible cells.
 			const remaining = safeWidth - 13 - rightTagVisLen - 1; // -1 for "┓"
 			if (identity && remaining >= 1) {
 				const rightTag =
 					theme.fg("dim", " ") +
 					hexFg(identity.color, identity.name) +
-					theme.fg("dim", " ━");
+					theme.fg("dim", `${selfQueueLabel} ━`);
 				const middle = theme.fg("dim", "━".repeat(remaining));
 				const right = theme.fg("dim", "┓");
 				topBorder = left + leftFill + middle + rightTag + right;
@@ -1164,11 +1165,10 @@ export default function (pi: ExtensionAPI) {
 				: hexFg(r.color, "#".repeat(filled)) + theme.fg("dim", "-".repeat(empty));
 			const bar = theme.fg("warning", "[") + barFill + theme.fg("warning", "]");
 			const pctPart = " " + theme.fg("accent", pctLabel.padStart(4));
-			const queuePart = r.isSelf ? theme.fg("dim", ` q:${r.queueDepth}`) : "";
 			const sep = theme.fg("dim", "  —  ");
 			const purposePart = theme.fg("muted", r.purpose || "");
 
-			const core = " " + swatch + " " + namePart + " " + modelPart + " " + bar + pctPart + queuePart;
+			const core = " " + swatch + " " + namePart + " " + modelPart + " " + bar + pctPart;
 			const line = ultraCompact ? core : core + sep + purposePart;
 			out.push(truncateToWidth(line, width));
 		}
