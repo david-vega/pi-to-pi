@@ -27,6 +27,7 @@ import * as crypto from "node:crypto";
 const COMS_DIR = process.env.PI_COMS_DIR || path.join(os.homedir(), ".pi", "coms");
 const MAX_HOPS = Number(process.env.PI_COMS_MAX_HOPS) || 5;
 const TIMEOUT_MS = Number(process.env.PI_COMS_TIMEOUT_MS) || 1_800_000;
+const PENDING_RESULT_TTL_MS = Number(process.env.PI_COMS_RESULT_TTL_MS) || 300_000;
 const PING_INTERVAL_MS = Number(process.env.PI_COMS_PING_INTERVAL_MS) || 10_000;
 const KEEPALIVE_INTERVAL_MS = 30_000;
 const LINE_CAP_BYTES = 64 * 1024;
@@ -106,6 +107,7 @@ interface PendingReply {
 	resolve: (value: any) => void;
 	reject: (err: Error) => void;
 	timer: NodeJS.Timeout | null;
+	cleanupTimer?: NodeJS.Timeout | null;
 	promise: Promise<{ response?: any; error?: string | null }>;
 	result?: { response?: any; error?: string | null };
 	target_name?: string;
@@ -117,6 +119,9 @@ interface InboundContext {
 	hops: number;
 	sender_endpoint: string;
 	sender_session: string;
+	sender_name: string;
+	sender_cwd: string;
+	prompt: string;
 	response_schema?: object | null;
 	fulfilled: boolean;
 }
@@ -583,6 +588,8 @@ export default function (pi: ExtensionAPI) {
 	const peerCards: Map<string, AgentCard & { staleCount: number }> = new Map();
 	const pendingReplies: Map<string, PendingReply> = new Map();
 	const inboundQueue: Map<string, InboundContext> = new Map();
+	const inboundOrder: string[] = [];
+	let activeInboundMsgId: string | null = null;
 	let server: net.Server | null = null;
 	let pingTimer: NodeJS.Timeout | null = null;
 	let keepaliveTimer: NodeJS.Timeout | null = null;
@@ -610,52 +617,99 @@ export default function (pi: ExtensionAPI) {
 		try { socket.end(); } catch { /* ignore */ }
 	}
 
+	function settlePendingReply(msgId: string, result: { response?: any; error?: string | null }): void {
+		const pending = pendingReplies.get(msgId);
+		if (!pending || pending.result) return;
+		if (pending.timer) {
+			try { clearTimeout(pending.timer); } catch { /* ignore */ }
+			pending.timer = null;
+		}
+		pending.result = result;
+		try { pending.resolve(result); } catch { /* ignore */ }
+		if (pending.cleanupTimer) {
+			try { clearTimeout(pending.cleanupTimer); } catch { /* ignore */ }
+		}
+		pending.cleanupTimer = setTimeout(() => {
+			pendingReplies.delete(msgId);
+		}, PENDING_RESULT_TTL_MS);
+		try { (pending.cleanupTimer as any).unref?.(); } catch { /* ignore */ }
+	}
+
+	function queueNextInboundTurn(): void {
+		if (activeInboundMsgId) return;
+		while (inboundOrder.length > 0) {
+			const nextId = inboundOrder[0];
+			const inbound = inboundQueue.get(nextId);
+			if (!inbound || inbound.fulfilled) {
+				inboundOrder.shift();
+				continue;
+			}
+			try {
+				pi.sendMessage(
+					{
+						customType: "coms-inbound",
+						content: `[from ${inbound.sender_name} @ ${inbound.sender_cwd}]\n\n${inbound.prompt}`,
+						display: true,
+						details: {
+							msg_id: inbound.msg_id,
+							sender_session: inbound.sender_session,
+							response_schema: inbound.response_schema ?? null,
+						},
+					},
+					{ deliverAs: "followUp", triggerTurn: true },
+				);
+				activeInboundMsgId = inbound.msg_id;
+				currentInbound = inbound;
+				return;
+			} catch {
+				// If we cannot inject the next turn, fail this inbound instead of blocking the queue.
+				inbound.fulfilled = true;
+				inboundQueue.delete(inbound.msg_id);
+				inboundOrder.shift();
+				const ident = identity;
+				if (ident) {
+					const respEnv: ResponseEnvelope = {
+						type: "response",
+						msg_id: inbound.msg_id,
+						sender_session: ident.session_id,
+						sender_endpoint: ident.endpoint,
+						hops: 0,
+						timestamp: nowIso(),
+						response: null,
+						error: "internal error",
+					};
+					void sendEnvelope(inbound.sender_endpoint, respEnv).catch(() => {});
+				}
+			}
+		}
+		currentInbound = null;
+	}
+
 	function handlePrompt(socket: net.Socket, env: PromptEnvelope): void {
-		// 1. Hop limit check
 		if (typeof env.hops !== "number" || env.hops >= MAX_HOPS) {
 			nack(socket, env.msg_id, "hops exceeded");
 			return;
 		}
+		if (inboundQueue.has(env.msg_id)) {
+			ackOk(socket, env.msg_id);
+			return;
+		}
 
-		// 2. Insert into inbound queue
 		const inbound: InboundContext = {
 			msg_id: env.msg_id,
 			hops: env.hops,
 			sender_endpoint: env.sender_endpoint,
 			sender_session: env.sender_session,
+			sender_name: env.sender_name,
+			sender_cwd: env.sender_cwd,
+			prompt: env.prompt,
 			response_schema: env.response_schema ?? null,
 			fulfilled: false,
 		};
 		inboundQueue.set(env.msg_id, inbound);
+		inboundOrder.push(env.msg_id);
+		queueNextInboundTurn();
 
-		// 3. Track the current inbound so that any coms_send issued during the
-		//    resulting LLM turn inherits the right hop count.
-		currentInbound = inbound;
-
-		// 4. Inject as a follow-up message into the receiver's next turn.
-		try {
-			pi.sendMessage(
-				{
-					customType: "coms-inbound",
-					content: `[from ${env.sender_name} @ ${env.sender_cwd}]\n\n${env.prompt}`,
-					display: true,
-					details: {
-						msg_id: env.msg_id,
-						sender_session: env.sender_session,
-						response_schema: env.response_schema ?? null,
-					},
-				},
-				{ deliverAs: "followUp", triggerTurn: true },
-			);
-		} catch (err) {
-			// If sendMessage fails, drop the inbound and nack.
-			inboundQueue.delete(env.msg_id);
-			currentInbound = null;
-			nack(socket, env.msg_id, "internal error");
-			return;
-		}
-
-		// 5. Ack + audit log
 		ackOk(socket, env.msg_id);
 		try {
 			pi.appendEntry("coms-log", {
@@ -670,19 +724,8 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function handleResponse(socket: net.Socket, env: ResponseEnvelope): void {
-		const pending = pendingReplies.get(env.msg_id);
-		if (pending) {
-			if (pending.timer) {
-				try { clearTimeout(pending.timer); } catch { /* ignore */ }
-				pending.timer = null;
-			}
-			pending.result = { response: env.response, error: env.error ?? null };
-			try {
-				pending.resolve(pending.result);
-			} catch {
-				// ignore
-			}
-			// Note: do NOT delete the entry here — coms_get poll may still want it.
+		if (pendingReplies.has(env.msg_id)) {
+			settlePendingReply(env.msg_id, { response: env.response, error: env.error ?? null });
 		} else {
 			try {
 				pi.appendEntry("coms-log", { event: "orphan_response", msg_id: env.msg_id });
@@ -1311,11 +1354,7 @@ export default function (pi: ExtensionAPI) {
 				response_schema: (params.response_schema as object | undefined) ?? null,
 			};
 
-			// Send the envelope synchronously and wait for the receiver's ack.
-			await sendEnvelope(target.endpoint, env);
-
-			// Register a pending entry whose promise the receiver-side handleResponse
-			// (or the timeout below) will settle.
+			// Register pending BEFORE sending to avoid a reply-race orphan.
 			let resolveFn!: (v: { response?: any; error?: string | null }) => void;
 			let rejectFn!: (e: Error) => void;
 			const promise = new Promise<{ response?: any; error?: string | null }>((res, rej) => {
@@ -1326,18 +1365,33 @@ export default function (pi: ExtensionAPI) {
 				resolve: resolveFn,
 				reject: rejectFn,
 				timer: null,
+				cleanupTimer: null,
 				promise,
 				target_name: target.name,
 				created_at: nowIso(),
 			};
 			entry.timer = setTimeout(() => {
-				if (entry.result) return;
-				entry.result = { error: "timeout" };
-				try { entry.resolve(entry.result); } catch { /* ignore */ }
+				settlePendingReply(msg_id, { error: "timeout" });
 			}, TIMEOUT_MS);
 			// Don't keep the event loop alive solely for this timer.
 			try { (entry.timer as any).unref?.(); } catch { /* ignore */ }
 			pendingReplies.set(msg_id, entry);
+
+			try {
+				// Send the envelope synchronously and wait for the receiver's ack.
+				await sendEnvelope(target.endpoint, env);
+			} catch (err) {
+				if (entry.timer) {
+					try { clearTimeout(entry.timer); } catch { /* ignore */ }
+					entry.timer = null;
+				}
+				if (entry.cleanupTimer) {
+					try { clearTimeout(entry.cleanupTimer); } catch { /* ignore */ }
+					entry.cleanupTimer = null;
+				}
+				pendingReplies.delete(msg_id);
+				throw err;
+			}
 
 			try {
 				pi.appendEntry("coms-log", {
@@ -1485,8 +1539,14 @@ export default function (pi: ExtensionAPI) {
 	// ━━ agent_end: capture turn output and dispatch response back ━━━━━━━━
 
 	pi.on("agent_end", async (_event, ctx) => {
-		const inbound = [...inboundQueue.values()].reverse().find((i) => !i.fulfilled);
-		if (!inbound || !identity) return;
+		if (!identity || !activeInboundMsgId) return;
+		const inbound = inboundQueue.get(activeInboundMsgId);
+		if (!inbound || inbound.fulfilled) {
+			activeInboundMsgId = null;
+			currentInbound = null;
+			queueNextInboundTurn();
+			return;
+		}
 
 		// Walk the session branch for the most recent assistant message text.
 		let lastAssistantText = "";
@@ -1526,8 +1586,10 @@ export default function (pi: ExtensionAPI) {
 			error,
 		};
 
+		let responseSent = false;
 		try {
 			await sendEnvelope(inbound.sender_endpoint, respEnv);
+			responseSent = true;
 			try {
 				pi.appendEntry("coms-log", {
 					event: "outbound_response",
@@ -1548,12 +1610,21 @@ export default function (pi: ExtensionAPI) {
 				// best-effort
 			}
 		}
+		if (!responseSent) return;
 
 		inbound.fulfilled = true;
 		inboundQueue.delete(inbound.msg_id);
+		if (inboundOrder[0] === inbound.msg_id) {
+			inboundOrder.shift();
+		} else {
+			const idx = inboundOrder.indexOf(inbound.msg_id);
+			if (idx >= 0) inboundOrder.splice(idx, 1);
+		}
+		activeInboundMsgId = null;
 		if (currentInbound && currentInbound.msg_id === inbound.msg_id) {
 			currentInbound = null;
 		}
+		queueNextInboundTurn();
 	});
 
 	// ━━ /coms slash command ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1585,6 +1656,24 @@ export default function (pi: ExtensionAPI) {
 			try { server.close(); } catch { /* ignore */ }
 			server = null;
 		}
+		for (const [msgId, pending] of pendingReplies) {
+			if (pending.timer) {
+				try { clearTimeout(pending.timer); } catch { /* ignore */ }
+				pending.timer = null;
+			}
+			if (pending.cleanupTimer) {
+				try { clearTimeout(pending.cleanupTimer); } catch { /* ignore */ }
+				pending.cleanupTimer = null;
+			}
+			if (!pending.result) {
+				try { pending.resolve({ error: "shutdown" }); } catch { /* ignore */ }
+			}
+			pendingReplies.delete(msgId);
+		}
+		inboundQueue.clear();
+		inboundOrder.length = 0;
+		activeInboundMsgId = null;
+		currentInbound = null;
 		if (identity) {
 			if (process.platform !== "win32") {
 				try { fs.unlinkSync(identity.endpoint); } catch { /* ignore */ }
