@@ -64,7 +64,7 @@ Tools:
 Pool widget behavior (`coms`):
 - Shows current/self agent and peers in one pool.
 - Self row uses a distinct visual marker/style for quick identification.
-- Displays model, context %, queue depth, and purpose (with sensible fallbacks when unavailable).
+- Displays model, context %, queue depth, and purpose with explicit fallbacks: model `unknown`, context `--%`, queue depth `q:0`, purpose empty string.
 - Rendering is hardened for narrow terminal widths to avoid border/line breakage.
 
 ---
@@ -104,7 +104,7 @@ Tools:
 Pool widget behavior (`coms-net`):
 - Shows current/self agent and peers in one pool.
 - Self row uses a distinct visual marker/style for quick identification.
-- Displays model, context %, queue depth, and purpose (with sensible fallbacks when unavailable).
+- Displays model, context %, queue depth, and purpose with explicit fallbacks: model `unknown`, context `--%`, queue depth `q:0`, purpose empty string.
 - Rendering is hardened for narrow terminal widths to avoid border/line breakage.
 
 ---
