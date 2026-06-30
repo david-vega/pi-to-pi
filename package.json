@@ -1,0 +1,32 @@
+{
+  "name": "pi-to-pi",
+  "version": "0.1.0",
+  "description": "Pi-to-Pi agent communication extensions for Pi Coding Agent (local sockets + network hub)",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-coding-agent",
+    "agent-communication",
+    "coms",
+    "sse"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/coms.ts",
+      "./extensions/coms-net.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "files": [
+    "extensions/coms.ts",
+    "extensions/coms-net.ts",
+    "scripts/coms-net-server.ts",
+    "README.md",
+    "LICENSE"
+  ]
+}
