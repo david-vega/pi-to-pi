@@ -1103,7 +1103,7 @@ export default function (pi: ExtensionAPI) {
 				const rightTag =
 					theme.fg("dim", " ") +
 					hexFg(identity.color, identity.name) +
-					theme.fg("warning", selfQueueLabel) +
+					theme.fg("accent", selfQueueLabel) +
 					theme.fg("dim", " ━");
 				const middle = theme.fg("dim", "━".repeat(remaining));
 				const right = theme.fg("dim", "┓");
