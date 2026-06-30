@@ -28,5 +28,9 @@
     "scripts/coms-net-server.ts",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "scripts": {
+    "check:pack": "npm pack --dry-run",
+    "check:load": "pi -e ./extensions/coms.ts -e ./extensions/coms-net.ts -p \"ping\""
+  }
 }
