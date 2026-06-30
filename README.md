@@ -12,7 +12,8 @@ Installable Pi package for agent-to-agent workflows.
 - `pi-pi`: orchestrator extension with parallel Pi-domain experts (`query_experts`)
 
 ### Reusable prompts/resources
-- Agent prompts: `scout`, `planner`, `builder`, `reviewer`
+- Agent prompts: `scout`, `planner`, `builder`, `reviewer`, `documenter`, `browser`, `plan-reviewer`, `red-team`, `blue-team`
+- `browser` is the package-facing browser automation prompt resource (derived for this package from the source repo's `bowser` role)
 - Pi-pi expert prompts under `agents/pi-pi/*.md` (including `pi-orchestrator.md`)
 
 ---

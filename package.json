@@ -23,7 +23,12 @@
       "./agents/scout.md",
       "./agents/planner.md",
       "./agents/builder.md",
-      "./agents/reviewer.md"
+      "./agents/reviewer.md",
+      "./agents/documenter.md",
+      "./agents/browser.md",
+      "./agents/plan-reviewer.md",
+      "./agents/red-team.md",
+      "./agents/blue-team.md"
     ]
   },
   "peerDependencies": {
@@ -39,6 +44,11 @@
     "agents/planner.md",
     "agents/builder.md",
     "agents/reviewer.md",
+    "agents/documenter.md",
+    "agents/browser.md",
+    "agents/plan-reviewer.md",
+    "agents/red-team.md",
+    "agents/blue-team.md",
     "agents/pi-pi/*.md",
     "scripts/coms-net-server.ts",
     "README.md",
