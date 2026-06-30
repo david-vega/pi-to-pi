@@ -121,6 +121,48 @@ Tool:
 
 ---
 
+## Cross-agent mode (`cross-agent`)
+
+`cross-agent` discovers and exposes resources from other agent ecosystems (`.claude`, `.gemini`, `.codex`) and local `.pi/agents`.
+
+- Registers discovered commands as `/name`
+- Registers discovered skills as `/skill:name`
+- Lists discovered agents for reference
+
+---
+
+## Cross-team mode (`agent-team` / `cross-team`)
+
+`cross-team` is an alias entrypoint for `agent-team`.
+
+It dispatches tasks to specialist agents via `dispatch_agent` and supports team presets.
+
+Teams config loading order:
+1. Project override: `.pi/agents/teams.yaml`
+2. Package fallback: bundled `agents/teams.yaml`
+
+Bundled `teams.yaml` uses `browser` in the `frontend` team (package-compatible replacement for source `bowser`).
+
+Commands:
+- `/agents-team`
+- `/agents-list`
+- `/agents-grid <1-6>`
+
+Tool:
+- `dispatch_agent`
+
+---
+
+## Till-done mode (`tilldone`)
+
+Task-discipline extension that enforces explicit task tracking before other tools are used.
+
+Commands/tooling:
+- Tool: `tilldone` (`new-list`, `add`, `toggle`, `remove`, `update`, `list`, `clear`)
+- Command: `/tilldone` overlay
+
+---
+
 ## Notes
 
 - Agent identity flag is `--cname` (not `--name`).

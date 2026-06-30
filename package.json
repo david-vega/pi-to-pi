@@ -18,7 +18,11 @@
       "./extensions/coms.ts",
       "./extensions/coms-net.ts",
       "./extensions/pi-pi.ts",
-      "./extensions/agent-chain.ts"
+      "./extensions/agent-chain.ts",
+      "./extensions/cross-agent.ts",
+      "./extensions/agent-team.ts",
+      "./extensions/cross-team.ts",
+      "./extensions/tilldone.ts"
     ],
     "prompts": [
       "./agents/scout.md",
@@ -33,6 +37,7 @@
     ]
   },
   "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*",
     "typebox": "*"
@@ -42,6 +47,10 @@
     "extensions/coms-net.ts",
     "extensions/pi-pi.ts",
     "extensions/agent-chain.ts",
+    "extensions/cross-agent.ts",
+    "extensions/agent-team.ts",
+    "extensions/cross-team.ts",
+    "extensions/tilldone.ts",
     "agents/scout.md",
     "agents/planner.md",
     "agents/builder.md",
@@ -52,6 +61,7 @@
     "agents/red-team.md",
     "agents/blue-team.md",
     "agents/agent-chain.yaml",
+    "agents/teams.yaml",
     "agents/pi-pi/*.md",
     "scripts/coms-net-server.ts",
     "README.md",
@@ -59,7 +69,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "check:load": "PI_OFFLINE=1 pi -e ./extensions/coms.ts -e ./extensions/coms-net.ts -e ./extensions/pi-pi.ts -e ./extensions/agent-chain.ts --help",
+    "check:load": "PI_OFFLINE=1 pi -e ./extensions/coms.ts -e ./extensions/coms-net.ts -e ./extensions/pi-pi.ts -e ./extensions/agent-chain.ts -e ./extensions/cross-agent.ts -e ./extensions/agent-team.ts -e ./extensions/cross-team.ts -e ./extensions/tilldone.ts --help",
     "check:pack": "npm pack --dry-run"
   }
 }
