@@ -61,6 +61,12 @@ Tools:
 - `coms_get`
 - `coms_await`
 
+Pool widget behavior (`coms`):
+- Shows current/self agent and peers in one pool.
+- Self row uses a distinct visual marker/style for quick identification.
+- Displays model, context %, queue depth, and purpose (with sensible fallbacks when unavailable).
+- Rendering is hardened for narrow terminal widths to avoid border/line breakage.
+
 ---
 
 ## Network mode (`coms-net`)
@@ -94,6 +100,12 @@ Tools:
 - `coms_net_send`
 - `coms_net_get`
 - `coms_net_await`
+
+Pool widget behavior (`coms-net`):
+- Shows current/self agent and peers in one pool.
+- Self row uses a distinct visual marker/style for quick identification.
+- Displays model, context %, queue depth, and purpose (with sensible fallbacks when unavailable).
+- Rendering is hardened for narrow terminal widths to avoid border/line breakage.
 
 ---
 
