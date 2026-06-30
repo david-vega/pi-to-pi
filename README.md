@@ -1,13 +1,19 @@
 # pi-to-pi
 
-Installable Pi package for agent-to-agent communication.
+Installable Pi package for agent-to-agent workflows.
 
 ## What this package includes
 
+### Communication extensions
 - `coms` (local): peer messaging on the same machine
 - `coms-net` (network): peer messaging through an HTTP/SSE hub
 
-Deliberately excluded: themes, theme cyclers, custom keybindings, and unrelated demo extensions.
+### Meta-builder extension
+- `pi-pi`: orchestrator extension with parallel Pi-domain experts (`query_experts`)
+
+### Reusable prompts/resources
+- Agent prompts: `scout`, `planner`, `builder`, `reviewer`
+- Pi-pi expert prompts under `agents/pi-pi/*.md` (including `pi-orchestrator.md`)
 
 ---
 
@@ -30,7 +36,7 @@ pi --cname planner --project default
 pi --cname coder --project default
 ```
 
-Then use tools:
+Tools:
 - `coms_list`
 - `coms_send`
 - `coms_get`
@@ -64,7 +70,7 @@ PI_COMS_NET_AUTH_TOKEN=<token> \
 pi --cname coder --project default
 ```
 
-Network tools:
+Tools:
 - `coms_net_list`
 - `coms_net_send`
 - `coms_net_get`
@@ -72,7 +78,25 @@ Network tools:
 
 ---
 
+## Pi-pi mode (`pi-pi`)
+
+Pi-pi loads expert prompts from:
+1. Project override: `.pi/agents/pi-pi/*.md`
+2. Package fallback: bundled `agents/pi-pi/*.md`
+
+So installs work out of the box, while still allowing per-project expert overrides.
+
+Commands:
+- `/experts`
+- `/experts-grid <1-5>`
+
+Tool:
+- `query_experts`
+
+---
+
 ## Notes
 
 - Agent identity flag is `--cname` (not `--name`).
-- If no `PI_COMS_NET_SERVER_URL`/server config exists, `coms-net` stays dormant (no startup error spam).
+- If no `PI_COMS_NET_SERVER_URL`/server config exists, `coms-net` stays dormant.
+- This package does not include themes, theme cyclers, or keybinding overrides.

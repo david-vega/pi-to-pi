@@ -1,7 +1,7 @@
 {
   "name": "pi-to-pi",
   "version": "0.1.0",
-  "description": "Pi-to-Pi agent communication extensions for Pi Coding Agent (local sockets + network hub)",
+  "description": "Pi package with Pi-to-Pi communication plus reusable agent personas and pi-pi expert orchestrator",
   "license": "MIT",
   "type": "module",
   "keywords": [
@@ -9,12 +9,21 @@
     "pi-coding-agent",
     "agent-communication",
     "coms",
-    "sse"
+    "sse",
+    "agents",
+    "orchestration"
   ],
   "pi": {
     "extensions": [
       "./extensions/coms.ts",
-      "./extensions/coms-net.ts"
+      "./extensions/coms-net.ts",
+      "./extensions/pi-pi.ts"
+    ],
+    "prompts": [
+      "./agents/scout.md",
+      "./agents/planner.md",
+      "./agents/builder.md",
+      "./agents/reviewer.md"
     ]
   },
   "peerDependencies": {
@@ -25,12 +34,19 @@
   "files": [
     "extensions/coms.ts",
     "extensions/coms-net.ts",
+    "extensions/pi-pi.ts",
+    "agents/scout.md",
+    "agents/planner.md",
+    "agents/builder.md",
+    "agents/reviewer.md",
+    "agents/pi-pi/*.md",
     "scripts/coms-net-server.ts",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
-    "check:pack": "npm pack --dry-run",
-    "check:load": "pi -e ./extensions/coms.ts -e ./extensions/coms-net.ts -p \"ping\""
+    "check:load": "PI_OFFLINE=1 pi -e ./extensions/coms.ts -e ./extensions/coms-net.ts -e ./extensions/pi-pi.ts --help",
+    "check:pack": "npm pack --dry-run"
   }
 }
