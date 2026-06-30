@@ -17,7 +17,8 @@
     "extensions": [
       "./extensions/coms.ts",
       "./extensions/coms-net.ts",
-      "./extensions/pi-pi.ts"
+      "./extensions/pi-pi.ts",
+      "./extensions/agent-chain.ts"
     ],
     "prompts": [
       "./agents/scout.md",
@@ -40,6 +41,7 @@
     "extensions/coms.ts",
     "extensions/coms-net.ts",
     "extensions/pi-pi.ts",
+    "extensions/agent-chain.ts",
     "agents/scout.md",
     "agents/planner.md",
     "agents/builder.md",
@@ -49,6 +51,7 @@
     "agents/plan-reviewer.md",
     "agents/red-team.md",
     "agents/blue-team.md",
+    "agents/agent-chain.yaml",
     "agents/pi-pi/*.md",
     "scripts/coms-net-server.ts",
     "README.md",
@@ -56,7 +59,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "check:load": "PI_OFFLINE=1 pi -e ./extensions/coms.ts -e ./extensions/coms-net.ts -e ./extensions/pi-pi.ts --help",
+    "check:load": "PI_OFFLINE=1 pi -e ./extensions/coms.ts -e ./extensions/coms-net.ts -e ./extensions/pi-pi.ts -e ./extensions/agent-chain.ts --help",
     "check:pack": "npm pack --dry-run"
   }
 }

@@ -96,6 +96,31 @@ Tool:
 
 ---
 
+## Agent-chain mode (`agent-chain`)
+
+`agent-chain` provides sequential pipeline orchestration via `run_chain`.
+
+Config loading order:
+1. Project override: `.pi/agents/agent-chain.yaml`
+2. Package fallback: bundled `agents/agent-chain.yaml`
+
+Agent prompt resolution for chain steps:
+1. `.pi/agents/*.md`
+2. `agents/*.md` in your project
+3. `.claude/agents/*.md` in your project
+4. bundled package `agents/*.md`
+
+This means packaged defaults work out of the box, while project-local agent prompts still override.
+
+Commands:
+- `/chain`
+- `/chain-list`
+
+Tool:
+- `run_chain`
+
+---
+
 ## Notes
 
 - Agent identity flag is `--cname` (not `--name`).
