@@ -42,6 +42,7 @@ const HEARTBEAT_MS = Number(process.env.PI_COMS_NET_HEARTBEAT_MS) || 10_000;
 const RECONNECT_BASE_MS = 500;
 const RECONNECT_MAX_MS = 10_000;
 const MESSAGE_TIMEOUT_MS = Number(process.env.PI_COMS_NET_MESSAGE_TTL_MS) || 1_800_000;
+const PENDING_RESULT_TTL_MS = Number(process.env.PI_COMS_NET_RESULT_TTL_MS) || 300_000;
 const HTTP_TIMEOUT_MS = 10_000;
 const SHUTDOWN_DELETE_TIMEOUT_MS = 2_000;
 
@@ -133,6 +134,7 @@ interface InboundContext {
 	sender_session: string;
 	sender_name: string;
 	sender_cwd: string;
+	prompt: string;
 	response_schema?: object | null;
 	fulfilled: boolean;
 }
@@ -141,6 +143,8 @@ interface PendingReply {
 	resolve: (value: { response?: any; error?: string | null }) => void;
 	reject: (err: Error) => void;
 	promise: Promise<{ response?: any; error?: string | null }>;
+	timeoutTimer?: NodeJS.Timeout | null;
+	cleanupTimer?: NodeJS.Timeout | null;
 	result?: { response?: any; error?: string | null };
 	target_name?: string;
 	target_session?: string;
@@ -401,7 +405,10 @@ export default function (pi: ExtensionAPI) {
 	let sseUrlPath: string | null = null;
 	const peerCards: Map<string, AgentCard> = new Map();
 	const pendingReplies: Map<string, PendingReply> = new Map();
+	const earlyResponses: Map<string, { response?: any; error?: string | null }> = new Map();
 	const inboundQueue: Map<string, InboundContext> = new Map();
+	const inboundOrder: string[] = [];
+	let activeInboundMsgId: string | null = null;
 	let sseAbort: AbortController | null = null;
 	let heartbeatTimer: NodeJS.Timeout | null = null;
 	let reconnectTimer: NodeJS.Timeout | null = null;
@@ -630,9 +637,80 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	function settlePendingReply(msgId: string, result: { response?: any; error?: string | null }): void {
+		const pending = pendingReplies.get(msgId);
+		if (!pending || pending.result) return;
+		if (pending.timeoutTimer) {
+			try { clearTimeout(pending.timeoutTimer); } catch { /* ignore */ }
+			pending.timeoutTimer = null;
+		}
+		pending.result = result;
+		try { pending.resolve(result); } catch { /* ignore */ }
+		if (pending.cleanupTimer) {
+			try { clearTimeout(pending.cleanupTimer); } catch { /* ignore */ }
+		}
+		pending.cleanupTimer = setTimeout(() => {
+			pendingReplies.delete(msgId);
+		}, PENDING_RESULT_TTL_MS);
+		try { (pending.cleanupTimer as any).unref?.(); } catch { /* ignore */ }
+	}
+
+	function queueNextInboundTurn(): void {
+		if (activeInboundMsgId) return;
+		while (inboundOrder.length > 0) {
+			const nextId = inboundOrder[0];
+			const inbound = inboundQueue.get(nextId);
+			if (!inbound || inbound.fulfilled) {
+				inboundOrder.shift();
+				continue;
+			}
+			try {
+				pi.sendMessage(
+					{
+						customType: "coms-net-inbound",
+						content:
+							`[inbound coms-net message from ${inbound.sender_name} @ ${inbound.sender_cwd}]\n` +
+							`[reply by writing a normal assistant message — your turn output is auto-returned to ${inbound.sender_name}. ` +
+							`DO NOT call coms_net_send/coms_net_await/coms_net_get to reply; that creates a ping-pong loop. ` +
+							`msg_id ${inbound.msg_id} belongs to ${inbound.sender_name}'s outbound, not yours.]\n\n` +
+							`${inbound.prompt}`,
+						display: true,
+						details: {
+							msg_id: inbound.msg_id,
+							sender_session: inbound.sender_session,
+							response_schema: inbound.response_schema,
+							hops: inbound.hops,
+						},
+					},
+					{ deliverAs: "followUp", triggerTurn: true },
+				);
+				activeInboundMsgId = inbound.msg_id;
+				currentInbound = inbound;
+				return;
+			} catch (err) {
+				inbound.fulfilled = true;
+				inboundQueue.delete(inbound.msg_id);
+				inboundOrder.shift();
+				audit("prompt_in_failed", { msg_id: inbound.msg_id, reason: safeError(err) });
+				if (identity) {
+					const failReq: ResponseSubmitRequest = {
+						project: identity.project,
+						responder_session: identity.session_id,
+						response: null,
+						error: "internal error",
+					};
+					void httpFetch("POST", `/v1/messages/${encodeURIComponent(inbound.msg_id)}/response`, failReq)
+						.catch(() => {});
+				}
+			}
+		}
+		currentInbound = null;
+	}
+
 	function handleInboundPrompt(data: any): void {
 		const msg_id: string | undefined = data?.msg_id;
 		if (!msg_id || typeof msg_id !== "string") return;
+		if (inboundQueue.has(msg_id)) return;
 		const sender = data.sender ?? {};
 		const senderName = typeof sender.name === "string" ? sender.name : "unknown";
 		const senderCwd = typeof sender.cwd === "string" ? sender.cwd : "?";
@@ -647,46 +725,23 @@ export default function (pi: ExtensionAPI) {
 			sender_session: senderSession,
 			sender_name: senderName,
 			sender_cwd: senderCwd,
+			prompt: promptText,
 			response_schema: responseSchema,
 			fulfilled: false,
 		};
 		inboundQueue.set(msg_id, inbound);
-		currentInbound = inbound;
+		inboundOrder.push(msg_id);
+		queueNextInboundTurn();
 
 		try {
-			pi.sendMessage(
-				{
-					customType: "coms-net-inbound",
-					content:
-						`[inbound coms-net message from ${senderName} @ ${senderCwd}]\n` +
-						`[reply by writing a normal assistant message — your turn output is auto-returned to ${senderName}. ` +
-						`DO NOT call coms_net_send/coms_net_await/coms_net_get to reply; that creates a ping-pong loop. ` +
-						`msg_id ${msg_id} belongs to ${senderName}'s outbound, not yours.]\n\n` +
-						`${promptText}`,
-					display: true,
-					details: {
-						msg_id,
-						sender_session: senderSession,
-						response_schema: responseSchema,
-						hops,
-					},
-				},
-				{ deliverAs: "followUp", triggerTurn: true },
-			);
-			try {
-				pi.appendEntry("coms-net-log", {
-					event: "prompt_in",
-					ts: nowIso(),
-					msg_id,
-					sender: senderSession,
-					hops,
-				});
-			} catch { /* best-effort */ }
-		} catch (err) {
-			inboundQueue.delete(msg_id);
-			currentInbound = null;
-			audit("prompt_in_failed", { msg_id, reason: safeError(err) });
-		}
+			pi.appendEntry("coms-net-log", {
+				event: "prompt_in",
+				ts: nowIso(),
+				msg_id,
+				sender: senderSession,
+				hops,
+			});
+		} catch { /* best-effort */ }
 	}
 
 	function handleInboundResponse(data: any): void {
@@ -694,10 +749,8 @@ export default function (pi: ExtensionAPI) {
 		if (!msg_id) return;
 		const responseVal = data.response;
 		const errVal: string | null = typeof data.error === "string" ? data.error : null;
-		const pending = pendingReplies.get(msg_id);
-		if (pending) {
-			pending.result = { response: responseVal, error: errVal };
-			try { pending.resolve(pending.result); } catch { /* ignore */ }
+		if (pendingReplies.has(msg_id)) {
+			settlePendingReply(msg_id, { response: responseVal, error: errVal });
 			try {
 				pi.appendEntry("coms-net-log", {
 					event: "response_in",
@@ -707,7 +760,8 @@ export default function (pi: ExtensionAPI) {
 				});
 			} catch { /* best-effort */ }
 		} else {
-			audit("orphan_response", { msg_id });
+			earlyResponses.set(msg_id, { response: responseVal, error: errVal });
+			audit("orphan_response", { msg_id, buffered: true });
 		}
 	}
 
@@ -1215,14 +1269,26 @@ export default function (pi: ExtensionAPI) {
 				resolveFn = res;
 				rejectFn = rej;
 			});
-			pendingReplies.set(msg_id, {
+			const entry: PendingReply = {
 				resolve: resolveFn,
 				reject: rejectFn,
 				promise,
+				timeoutTimer: null,
+				cleanupTimer: null,
 				target_name: params.target,
 				target_session,
 				created_at: nowIso(),
-			});
+			};
+			entry.timeoutTimer = setTimeout(() => {
+				settlePendingReply(msg_id, { error: "timeout" });
+			}, MESSAGE_TIMEOUT_MS);
+			try { (entry.timeoutTimer as any).unref?.(); } catch { /* ignore */ }
+			pendingReplies.set(msg_id, entry);
+			const buffered = earlyResponses.get(msg_id);
+			if (buffered) {
+				earlyResponses.delete(msg_id);
+				settlePendingReply(msg_id, buffered);
+			}
 
 			try {
 				pi.appendEntry("coms-net-log", {
@@ -1441,8 +1507,14 @@ export default function (pi: ExtensionAPI) {
 	// ━━ agent_end: capture turn output and submit response ━━━━━━━━━━━━━━━━
 
 	pi.on("agent_end", async (_event, ctx) => {
-		const inbound = [...inboundQueue.values()].reverse().find((i) => !i.fulfilled);
-		if (!inbound || !identity) return;
+		if (!identity || !activeInboundMsgId) return;
+		const inbound = inboundQueue.get(activeInboundMsgId);
+		if (!inbound || inbound.fulfilled) {
+			activeInboundMsgId = null;
+			currentInbound = null;
+			queueNextInboundTurn();
+			return;
+		}
 
 		// Walk the session branch for the most recent assistant text.
 		let lastAssistantText = "";
@@ -1478,8 +1550,10 @@ export default function (pi: ExtensionAPI) {
 			error,
 		};
 
+		let responseSent = false;
 		try {
 			await httpFetch("POST", `/v1/messages/${encodeURIComponent(inbound.msg_id)}/response`, req);
+			responseSent = true;
 			try {
 				pi.appendEntry("coms-net-log", {
 					event: "response_out",
@@ -1491,12 +1565,21 @@ export default function (pi: ExtensionAPI) {
 		} catch (e: any) {
 			audit("response_out_failed", { msg_id: inbound.msg_id, reason: safeError(e) });
 		}
+		if (!responseSent) return;
 
 		inbound.fulfilled = true;
 		inboundQueue.delete(inbound.msg_id);
+		if (inboundOrder[0] === inbound.msg_id) {
+			inboundOrder.shift();
+		} else {
+			const idx = inboundOrder.indexOf(inbound.msg_id);
+			if (idx >= 0) inboundOrder.splice(idx, 1);
+		}
+		activeInboundMsgId = null;
 		if (currentInbound && currentInbound.msg_id === inbound.msg_id) {
 			currentInbound = null;
 		}
+		queueNextInboundTurn();
 	});
 
 	// ━━ /coms-net slash command ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1572,6 +1655,25 @@ export default function (pi: ExtensionAPI) {
 			try { sseAbort.abort(); } catch { /* ignore */ }
 			sseAbort = null;
 		}
+		earlyResponses.clear();
+		for (const [msgId, pending] of pendingReplies) {
+			if (pending.timeoutTimer) {
+				try { clearTimeout(pending.timeoutTimer); } catch { /* ignore */ }
+				pending.timeoutTimer = null;
+			}
+			if (pending.cleanupTimer) {
+				try { clearTimeout(pending.cleanupTimer); } catch { /* ignore */ }
+				pending.cleanupTimer = null;
+			}
+			if (!pending.result) {
+				try { pending.resolve({ error: "shutdown" }); } catch { /* ignore */ }
+			}
+			pendingReplies.delete(msgId);
+		}
+		inboundQueue.clear();
+		inboundOrder.length = 0;
+		activeInboundMsgId = null;
+		currentInbound = null;
 
 		// Best-effort DELETE with short timeout.
 		if (identity && serverUrl && authToken) {
