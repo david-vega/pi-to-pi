@@ -1143,7 +1143,8 @@ export default function (pi: ExtensionAPI) {
 			const pctLabel = r.pct == null ? "--%" : `${r.pct}%`;
 
 			if (r.stale) {
-				const staleLine = `✗ ${r.name.padEnd(nameWidth)} ${abbreviateModel(r.model || "unknown").padEnd(modelWidth)} [${"-".repeat(barWidth)}] ${pctLabel.padStart(4)}${r.isSelf ? ` q:${r.queueDepth}` : ""}`;
+				const staleCore = `✗ ${r.name.padEnd(nameWidth)} ${abbreviateModel(r.model || "unknown").padEnd(modelWidth)} [${"-".repeat(barWidth)}] ${pctLabel.padStart(4)}${r.isSelf ? ` q:${r.queueDepth}` : ""}`;
+				const staleLine = ultraCompact ? staleCore : `${staleCore}  —  ${r.purpose || ""}`;
 				out.push(truncateToWidth(" " + theme.fg("dim", staleLine), width));
 				continue;
 			}
