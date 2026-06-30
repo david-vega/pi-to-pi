@@ -1045,9 +1045,22 @@ export default function (pi: ExtensionAPI) {
 			pct: number | null;
 			pending: boolean;
 			stale: boolean;
+			isSelf: boolean;
 		}
 
 		const rows: Row[] = [];
+		if (identity) {
+			rows.push({
+				name: identity.name,
+				model: currentCtx?.model?.id ?? identity.model,
+				color: identity.color,
+				purpose: identity.purpose,
+				pct: Math.round(currentCtx?.getContextUsage()?.percent ?? 0),
+				pending: false,
+				stale: false,
+				isSelf: true,
+			});
+		}
 		for (const [sid, card] of peerCards.entries()) {
 			if (identity && sid === identity.session_id) continue;
 			if (!includeExplicit && card.explicit) continue;
@@ -1059,6 +1072,7 @@ export default function (pi: ExtensionAPI) {
 				pct: typeof card.context_used_pct === "number" ? card.context_used_pct : null,
 				pending: card.status === "stale",
 				stale: card.status === "offline",
+				isSelf: false,
 			});
 		}
 
@@ -1100,7 +1114,10 @@ export default function (pi: ExtensionAPI) {
 			];
 		}
 
-		rows.sort((a, b) => a.name.localeCompare(b.name));
+		rows.sort((a, b) => {
+			if (a.isSelf !== b.isSelf) return a.isSelf ? -1 : 1;
+			return a.name.localeCompare(b.name);
+		});
 
 		const out: string[] = [topBorder];
 
@@ -1116,8 +1133,12 @@ export default function (pi: ExtensionAPI) {
 				continue;
 			}
 
-			const swatch = r.pending ? theme.fg("dim", "●") : hexFg(r.color, "●");
-			const namePart = theme.fg("accent", r.name.padEnd(12));
+			const swatch = r.isSelf
+				? theme.fg("success", "◆")
+				: (r.pending ? theme.fg("dim", "●") : hexFg(r.color, "●"));
+			const namePart = r.isSelf
+				? theme.bold(theme.fg("success", r.name.padEnd(12)))
+				: theme.fg("accent", r.name.padEnd(12));
 			const modelPart = theme.fg("dim", abbreviateModel(r.model).padEnd(14));
 			const barFill = r.pending
 				? theme.fg("dim", "-".repeat(15))
